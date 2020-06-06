@@ -1,0 +1,160 @@
+---
+title: "Analysis of the Adverse Health and Economic Impacts of US Storms"
+author: "Ujas Italia"
+date: "05/06/2020"
+output: html_document
+---
+
+## 1: Synopsis
+The goal of the assignment is to explore the NOAA Storm Database and explore the effects of severe weather events on both population and economy.The database covers the time period between 1950 and November 2011.
+
+The following analysis investigates which types of severe weather events are most harmful on:
+
+1. Health (injuries and fatalities) 
+2. Property and crops (economic consequences)
+
+Information on the Data: [Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+## 2: Data Processing
+
+### 2.1 Data Loading
+```{r cache=TRUE, eval=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(fileUrl, destfile = "repdata_data_StormData.csv.bz2")
+data <- read.csv("repdata_data_StormData.csv.bz2")
+```
+
+```{r include=FALSE, cache=TRUE}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+data <- read.csv("repdata_data_StormData.csv.bz2")
+```
+
+### 2.2 Data looks like 
+```{r cache=TRUE}
+head(data, 3)
+```
+
+### 2.3: Data Subsetting
+```{r cache=TRUE, results='hide'}
+# selecting required coulmns only
+subData <- subset(data, select = c(EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP))
+
+# deleting the zero value rows
+subDataHealth <- subData[subData$FATALITIES !=0 |
+                           subData$INJURIES !=0, ]
+
+subDataProp <- subData[subData$PROPDMG !=0 |
+                           subData$CROPDMG !=0, ]
+```
+
+
+### 2.4 Data conversion 
+```{r cache=TRUE, results='hide'}
+#creating data for first problem
+subDataHealth <- aggregate(cbind(FATALITIES, INJURIES) ~ EVTYPE, data = subData, FUN=sum)
+subDataHealth$PEOPLE_LOSS <- subDataHealth$FATALITIES + subDataHealth$INJURIES
+subDataHealth <- subDataHealth[order(subDataHealth$PEOPLE_LOSS, decreasing = TRUE), ]
+subDataHealth <- subDataHealth[1:10,]
+bad_stuff <- melt(subDataHealth, id.vars="EVTYPE", variable.name = "bad_thing")
+
+#converting PROPDMGEXP and CROPDMGEXP values
+subData$PROPDMGEXP <- gsub("[Hh]", "2", subData$PROPDMGEXP)
+ subData$PROPDMGEXP <- gsub("[Kk]", "3", subData$PROPDMGEXP)
+ subData$PROPDMGEXP <- gsub("[Mm]", "6", subData$PROPDMGEXP)
+ subData$PROPDMGEXP <- gsub("[Bb]", "9", subData$PROPDMGEXP)
+ subData$PROPDMGEXP <- gsub("\\+", "1", subData$PROPDMGEXP)
+ subData$PROPDMGEXP <- gsub("\\?|\\-|\\ ", "0",  subData$PROPDMGEXP)
+ subData$PROPDMGEXP <- as.numeric(subData$PROPDMGEXP)
+
+ subData$CROPDMGEXP <- gsub("[Hh]", "2", subData$CROPDMGEXP)
+ subData$CROPDMGEXP <- gsub("[Kk]", "3", subData$CROPDMGEXP)
+ subData$CROPDMGEXP <- gsub("[Mm]", "6", subData$CROPDMGEXP)
+ subData$CROPDMGEXP <- gsub("[Bb]", "9", subData$CROPDMGEXP)
+ subData$CROPDMGEXP <- gsub("\\+", "1", subData$CROPDMGEXP)
+ subData$CROPDMGEXP <- gsub("\\-|\\?|\\ ", "0", subData$CROPDMGEXP)
+ subData$CROPDMGEXP <- as.numeric(subData$CROPDMGEXP)
+
+ #changing null values to 0
+ subData$PROPDMGEXP[is.na(subData$PROPDMGEXP)] <- 0
+ subData$CROPDMGEXP[is.na(subData$CROPDMGEXP)] <- 0
+
+# adding variables by calculating total value of PROPDMGEXP and CROPDMGEXP
+ subData <- mutate(subData, PROPDMGTOTAL = PROPDMG * (10 ^ PROPDMGEXP), CROPDMGTOTAL = CROPDMG * (10 ^ CROPDMGEXP))
+ 
+# creating data for scond problem
+Economic_data <- aggregate(cbind(PROPDMGTOTAL, CROPDMGTOTAL) ~ EVTYPE, data = subData, FUN=sum)
+Economic_data$ECONOMIC_LOSS <- Economic_data$PROPDMGTOTAL + Economic_data$CROPDMGTOTAL
+Economic_data <- Economic_data[order(Economic_data$ECONOMIC_LOSS, decreasing = TRUE), ]
+Economic_data <- Economic_data[1:10,]
+econ_consequences <- melt(Economic_data, id.vars="EVTYPE", variable.name = "Damage_Type")
+```
+
+
+## 3: Results
+
+### 3.1: Events that are Most Harmful to Population Health
+```{r cache=TRUE}
+# Create chart
+ healthChart <- ggplot(bad_stuff, aes(x=reorder(EVTYPE, value), y=value))
+
+ # Plot data as bar chart
+ healthChart = healthChart + geom_bar(stat="identity", aes(fill=bad_thing), position="dodge")
+
+ # Format y-axis scale and set y-axis label
+ healthChart = healthChart + ylab("Frequency Count")
+
+ # Set x-axis label
+ healthChart = healthChart + xlab("Event Type")
+
+ # Rotate x-axis tick labels
+ healthChart = healthChart + theme(axis.text.x = element_text(angle=45, hjust=1))
+
+ # Set chart title and center it
+ healthChart = healthChart + ggtitle("Top 10 US Killers") + theme(plot.title = element_text(hjust = 0.5))
+
+ print(healthChart)
+```
+
+### 3.2: Events that have the Greatest Economic Consequences
+```{r cache=TRUE}
+ econChart <- ggplot(econ_consequences, aes(x=reorder(EVTYPE, -value), y=value))
+
+ # Plot data as bar chart
+ econChart = econChart + geom_bar(stat="identity", aes(fill=Damage_Type), position="dodge")
+
+ # Format y-axis scale and set y-axis label
+ econChart = econChart + ylab("Cost (dollars)")
+
+ # Set x-axis label
+ econChart = econChart + xlab("Event Type")
+
+ # Rotate x-axis tick labels
+ econChart = econChart + theme(axis.text.x = element_text(angle=45, hjust=1))
+
+ # Set chart title and center it
+ econChart = econChart + ggtitle("Top 10 US Storm Events causing Economic Consequences") + theme(plot.title = element_text(hjust = 0.5))
+
+ print(econChart)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
